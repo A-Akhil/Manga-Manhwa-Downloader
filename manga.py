@@ -21,7 +21,7 @@ def download_img_thread(seriesName, chpNum, start_page, end_page):
             print(DOESNT_EXIST)
             break
 
-        download_img(pg_url, download_path, current_pg)
+        download_img(pg_url, download_path, current_pg, chpNum)
 
         current_pg += 1
 
@@ -64,14 +64,21 @@ def get_last_page_number(seriesName, chpNum):
             break
 
     # The last available page is at upper_bound - 1
-    print(f"{seriesName} last page {upper_bound-1}" )
+    print(f"{seriesName} Chapter {chpNum} last page {upper_bound-1}")
     return upper_bound - 1
 
 def download_manga_thread(seriesName, start_chp, end_chp):
-    for chpNum in range(start_chp, end_chp + 1):
-        last_page = get_last_page_number(seriesName, chpNum)
-        print(f"Currently downloading Chapter #{chpNum}, Last Page: {last_page}")
-        download_chp_thread(seriesName, chpNum, 1, last_page)
+    with ThreadPoolExecutor(max_workers=min(end_chp - start_chp + 1, 5)) as executor:
+        futures = []
+        for chpNum in range(start_chp, end_chp + 1):
+            last_page = get_last_page_number(seriesName, chpNum)
+            print(f"Currently downloading Chapter #{chpNum}, Last Page: {last_page}")
+            future = executor.submit(download_chp_thread, seriesName, chpNum, 1, last_page)
+            futures.append(future)
+
+        # Wait for all chapter downloads to complete
+        for future in futures:
+            future.result()
 
 def get_last_chapter_number(manga):
     # Start with an initial guess (e.g., a large number)
@@ -119,7 +126,6 @@ def main():
             break
         else:
             print("Enter a valid choice")
-
 
 if __name__ == "__main__":
     main()
