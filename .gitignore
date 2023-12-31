@@ -1,1 +1,5 @@
 .idea/
+man/
+test.py
+venv/
+__pycache__/
