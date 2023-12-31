@@ -3,6 +3,7 @@ from stringHelpers import *
 import requests
 import shutil
 import os
+import threading
 
 def send_request(url, binary=False):
     try:
@@ -19,12 +20,17 @@ def not_released_yet(seriesName, chpNum):
 
     return NOT_RELEASED_MSG in html
 
+
+# Add a lock for synchronizing access to os.makedirs
+download_lock = threading.Lock()
+
 def download_img(url, download_path, pgNum, chpNum):
-    if not os.path.exists(download_path):
-        os.makedirs(download_path)
+    with download_lock:
+        if not os.path.exists(download_path):
+            os.makedirs(download_path)
 
     img_name = add_zeros(str(pgNum)) + FILE_EXT
-    img_path = download_path + img_name
+    img_path = os.path.join(download_path, img_name)
 
     request = send_request(url, True)
 

@@ -1,4 +1,5 @@
 from settings import *
+import os
 
 def dashes(seriesName):
     return "_".join(seriesName.split(" ")).lower()
@@ -12,4 +13,5 @@ def get_url(seriesName, chpNum, pgNum = 1):
     return PROVIDER + dashes(seriesName) + "/" + dashes(seriesName) + "_" + str(chpNum) + "/" +  dashes(seriesName) + "_" + str(chpNum) + "_" + str(pgNum) #https://images.mangafreak.net/mangas/jujutsu_kaisen/jujutsu_kaisen_245/jujutsu_kaisen_245_2.jpg
 
 def get_download_path(seriesName, chpNum):
-    return LOCAL_PATH + seriesName + "\\" + str(chpNum) + "\\"   
+    formatted_series_name = dashes(seriesName)
+    return os.path.join(LOCAL_PATH, formatted_series_name, str(chpNum))
