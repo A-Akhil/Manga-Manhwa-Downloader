@@ -122,9 +122,12 @@ def main():
             break
         elif c == 3:
             chp = int(input("Enter chapter number:"))
-            download_chp_thread(manga, chp)
+            last_page = get_last_page_number(manga, chp)
+            print(f"Currently downloading Chapter #{chp}, Last Page: {last_page}")
+            download_chp_thread(manga, chp, 1, last_page)  # Pass start_page and end_page as 1 and last_page
             break
-        else:
+
+    else:
             print("Enter a valid choice")
 
 if __name__ == "__main__":
