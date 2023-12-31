@@ -1,32 +1,51 @@
 from settings import *
 from request import *
 from stringHelpers import *
+import threading
+
 
 isThere = 1
 count = 0
 
-def download_chp(seriesName, chpNum):
-    current_pg = INITAL_PAGE
+def download_chp_thread(seriesName, chpNum, start_page):
+    current_pg = start_page
     download_path = get_download_path(seriesName, chpNum)
 
     if not_released_yet(seriesName, chpNum):
         print(NOT_RELEASED_MSG)
-        return None
+        return
+
     while True:
         pg_url = get_url(seriesName, chpNum, current_pg)
         request = send_request(pg_url)
 
         if request.status_code == 404:
             print(DOESNT_EXIST)
-            global isThere, count
-            isThere = 0
-            count += 1
             break
 
         download_img(pg_url, download_path, current_pg)
 
         current_pg += 1
-        count = 0
+
+        # Download 10 pages at a time
+        if (current_pg - start_page) % 10 == 0:
+            break
+
+
+def download_chp(seriesName, chpNum):
+    num_threads = 5  # Adjust the number of threads based on your system and network capabilities
+    threads = []
+
+    for i in range(1, num_threads + 1):
+        start_page = (i - 1) * 10 + 1
+        thread = threading.Thread(target=download_chp_thread, args=(seriesName, chpNum, start_page))
+        threads.append(thread)
+
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join()
 
 manga = input("Enter Manga name:")
 while True:
