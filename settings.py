@@ -1,5 +1,7 @@
+import os
+
 PROVIDER = "https://images.mangafreak.net/mangas/"
-LOCAL_PATH = "/home/akhil/Downloads/temp/Manga-Scrapper/man/"
+LOCAL_PATH = os.getcwd()
 INITAL_PAGE = 1
 SUCCESS_MSG = "The Chapter has been successfully downloaded"
 DOWNLOADING_MSG = "Currently downloading page #"
