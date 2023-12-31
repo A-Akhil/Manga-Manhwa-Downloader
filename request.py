@@ -19,7 +19,7 @@ def not_released_yet(seriesName, chpNum):
 
     return NOT_RELEASED_MSG in html
 
-def download_img(url, download_path, pgNum):
+def download_img(url, download_path, pgNum, chpNum):
     if not os.path.exists(download_path):
         os.makedirs(download_path)
 
@@ -32,4 +32,4 @@ def download_img(url, download_path, pgNum):
         request.raw.decode_content = True
         shutil.copyfileobj(request.raw, file_path)
 
-    print(DOWNLOADING_MSG + str(pgNum))
+    print(DOWNLOADING_MSG + str(pgNum) + " Chapter " + str(chpNum))
