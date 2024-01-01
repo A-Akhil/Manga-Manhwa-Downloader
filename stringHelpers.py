@@ -9,8 +9,8 @@ def add_zeros(pgNum):
     zeros = "0" * (EST_MAX_DIGITS - digits)
     return zeros + pgNum
 
-def get_url(seriesName, chpNum, pgNum = 1):
-    return PROVIDER + dashes(seriesName) + "/" + dashes(seriesName) + "_" + str(chpNum) + "/" +  dashes(seriesName) + "_" + str(chpNum) + "_" + str(pgNum) #https://images.mangafreak.net/mangas/jujutsu_kaisen/jujutsu_kaisen_245/jujutsu_kaisen_245_2.jpg
+def get_url(seriesName, chpNum, pgNum=1):
+    return os.path.join(PROVIDER, dashes(seriesName), f"{dashes(seriesName)}_{chpNum}", f"{dashes(seriesName)}_{chpNum}_{pgNum}{FILE_EXT}")
 
 def get_download_path(seriesName, chpNum):
     formatted_series_name = dashes(seriesName)
