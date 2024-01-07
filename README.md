@@ -1,12 +1,12 @@
 ## Overview
 
-This Python script allows users to download manga chapters, either the entire series, a range of chapters, or a single chapter. It supports saving the downloaded pages as images. The script employs multithreading to enhance download efficiency.
+This Python script allows users to download manga chapters, either the entire series, a range of chapters, or a single chapter. It supports saving the downloaded pages as images, pdf and cbz. The script employs multithreading to enhance download efficiency.
 
 ## Features
 1. Download entire manga series.
 2. Download a range of chapters.
 3. Download a single chapter.
-4. Option to save downloaded pages as images.
+4. Option to save downloaded pages as images, pdf, cbz.
 5. Multithreading for faster downloads.
 
  Download or clone the repository
@@ -72,7 +72,7 @@ python manga.py
 
 4 Follow the prompts to specify the range or chapter number.
 
-5 Choose whether to save images and/or a PDF.
+5 Choose whether to save images, pdf or a cbz file.
 
 
 ## Acknowledgments
