@@ -120,6 +120,10 @@ def main():
         elif c == 2:
             start_end_input = input("Enter range in the format start-end: ")
             start, end = map(int, start_end_input.split("-"))
+
+            if start > end:
+                start, end = end, start
+            
             download_manga_thread(manga, start, end)
             break
         elif c == 3:
