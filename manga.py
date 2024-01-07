@@ -119,7 +119,7 @@ def main():
     manga = input("Enter Manga name:")
     create_archive_input = int(input("Choose your preference:\n1. PDF\n2. CBZ\n3. Both PDF and CBZ\n4. Only Images\nEnter your choice:"))
     while True:
-        c = int(input("\n1. Download entire manga \n2. Download range of chapters(ex: 2-21) \n3. Download single chapter \nEnter your choice:"))
+        c = int(input("1. Download entire manga \n2. Download range of chapters(ex: 2-21) \n3. Download single chapter \nEnter your choice:"))
         if c == 1:
             start_chp = 1
             end_chp = get_last_chapter_number(manga)
