@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from settings import *
 from request import *
 from stringHelpers import *
+from output_cbz_pdf import *
 import os
 import threading
 
@@ -107,6 +108,7 @@ def get_last_chapter_number(manga):
 
 def main():
     manga = input("Enter Manga name:")
+    create_archive_input = int(input("Choose your preference:\n1. PDF\n2. CBZ\n3. Both PDF and CBZ\n4. Only Images\nEnter your choice:"))
     while True:
         c = int(input("\n1. Download entire manga \n2. Download range of chapters(ex: 2-21) \n3. Download single chapter \nEnter your choice:"))
         if c == 1:
@@ -126,6 +128,22 @@ def main():
             print(f"Currently downloading Chapter #{chp}, Last Page: {last_page}")
             download_chp_thread(manga, chp, 1, last_page)  # Pass start_page and end_page as 1 and last_page
             break
+
+    if create_archive_input in [1, 2, 3, 4]:
+        if create_archive_input == 1:
+            file_extension = "pdf"
+        elif create_archive_input == 2:
+            file_extension = "cbz"
+        elif create_archive_input == 3:
+            file_extension = "both"
+        else:
+            file_extension = "images"
+
+        if file_extension == "both":
+            create_archive(manga, "pdf")
+            create_archive(manga, "cbz")
+        else:
+            create_archive(manga, file_extension)
 
     else:
             print("Enter a valid choice")
