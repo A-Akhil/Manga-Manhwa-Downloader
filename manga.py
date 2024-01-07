@@ -26,8 +26,17 @@ def download_img_thread(seriesName, chpNum, start_page, end_page):
 
         current_pg += 1
 
+def get_optimal_thread_count():
+    # Get the number of available processors (cores)
+    num_processors = os.cpu_count()
+
+    # Adjust the number of threads based on your criteria
+    optimal_threads = min(num_processors * 2, 10)
+
+    return optimal_threads
+
 def download_chp_thread(seriesName, chpNum, start_page, end_page):
-    num_threads = 5  # Adjust the number of threads based on your system and network capabilities
+    num_threads = get_optimal_thread_count()
     threads = []
 
     for i in range(1, num_threads + 1):
@@ -123,7 +132,7 @@ def main():
 
             if start > end:
                 start, end = end, start
-            
+
             download_manga_thread(manga, start, end)
             break
         elif c == 3:
