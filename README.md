@@ -12,7 +12,7 @@ This Python script allows users to download manga chapters, either the entire se
  Download or clone the repository
 ```bash
   git clone https://github.com/AkhilAndroid/Manga-Manhwa-Downloader.git
-  cd cd Manga-Manhwa-Downloader
+  cd Manga-Manhwa-Downloader
 ```
 Create a Python Virtual Environment:
 
