@@ -10,7 +10,7 @@ def add_zeros(pgNum):
     return zeros + pgNum
 
 def get_url(seriesName, chpNum, pgNum=1):
-    return os.path.join(PROVIDER, dashes(seriesName), f"{dashes(seriesName)}_{chpNum}", f"{dashes(seriesName)}_{chpNum}_{pgNum}{FILE_EXT}")
+    return os.path.join(PROVIDER, dashes(seriesName), f"{dashes(seriesName)}_{chpNum}", f"{dashes(seriesName)}_{chpNum}_{pgNum}{FILE_EXT}").replace("\\", "/")
 
 def get_download_path(seriesName, chpNum):
     formatted_series_name = dashes(seriesName)
