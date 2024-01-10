@@ -3,3 +3,4 @@ man/
 test.py
 venv/
 __pycache__/
+env/
