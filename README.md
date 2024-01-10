@@ -74,6 +74,13 @@ python manga.py
 
 5 Choose whether to save images, pdf or a cbz file.
 
+## 💪 Thanks to all Wonderful Contributors
+
+Thanks a lot for spending your time helping this Manga-Manhwa-Downloader grow.
+Thanks a lot! Keep rocking 🍻
+
+[![Contributors](https://contrib.rocks/image?repo=AkhilAndroid/manga-Manhwa-Downloader)](https://github.com/AkhilAndroid/manga-Manhwa-Downloader/graphs/contributors)
+
 
 ## Acknowledgments
 
