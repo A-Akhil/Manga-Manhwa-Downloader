@@ -79,7 +79,7 @@ python manga.py
 Thanks a lot for spending your time helping this Manga-Manhwa-Downloader grow.
 Thanks a lot! Keep rocking 🍻
 
-[![Contributors](https://contrib.rocks/image?repo=AkhilAndroid/manga-Manhwa-Downloader)](https://github.com/AkhilAndroid/manga-Manhwa-Downloader/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=A-Akhil/manga-Manhwa-Downloader)](https://github.com/A-Akhil/manga-Manhwa-Downloader/graphs/contributors)
 
 
 ## Acknowledgments
