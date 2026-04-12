@@ -164,7 +164,7 @@ Please:
 ## 🙌 Credits
 
 * Inspired by original project:
-  https://github.com/AkhilAndroid/Manga-Manhwa-Downloader
+  https://github.com/A-Akhil/Manga-Manhwa-Downloader
 
 ---
 
