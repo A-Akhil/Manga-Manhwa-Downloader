@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Manga Downloader</title>
+    <style>
+        :root {
+            --bg: #0a0a14;
+            --bg-soft: #111121;
+            --panel: #17172a;
+            --panel-soft: #1f2037;
+            --panel-border: rgba(255, 255, 255, 0.07);
+            --text: #f5f4ff;
+            --muted: #9da1c3;
+            --accent: #7a4dff;
+            --accent-soft: rgba(122, 77, 255, 0.18);
+            --success: #2fc98f;
+            --danger: #ff6f91;
+            --warning: #f7b955;
+            --terminal: #0b0d16;
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top center, rgba(122, 77, 255, 0.18), transparent 26%),
+                linear-gradient(180deg, #090912 0%, var(--bg) 100%);
+            color: var(--text);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .app-shell {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 18px 42px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            padding-bottom: 22px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: clamp(30px, 4vw, 42px);
+            color: #9a74ff;
+            letter-spacing: -0.03em;
+        }
+
+        .version {
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-btn {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: 11px 18px;
+            border-radius: 12px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent) 0%, #9167ff 100%);
+            color: white;
+            box-shadow: 0 12px 26px rgba(122, 77, 255, 0.28);
+        }
+
+        .section {
+            display: none;
+            padding-top: 26px;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .search-panel,
+        .terminal-panel,
+        .download-card {
+            background: linear-gradient(180deg, rgba(26, 26, 44, 0.98), rgba(18, 18, 31, 0.98));
+            border: 1px solid var(--panel-border);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+        }
+
+        .search-panel,
+        .terminal-panel {
+            padding: 20px;
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) 180px 180px 140px;
+            gap: 12px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        .field.inline-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        input,
+        select,
+        button {
+            border-radius: 16px;
+            font: inherit;
+        }
+
+        input,
+        select {
+            min-height: 54px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(7, 10, 20, 0.9);
+            color: var(--text);
+            padding: 0 16px;
+            outline: none;
+        }
+
+        input::placeholder {
+            color: #7f84aa;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: #8f66ff;
+            box-shadow: 0 0 0 4px rgba(122, 77, 255, 0.16);
+        }
+
+        .search-btn {
+            min-height: 54px;
+            border: 0;
+            background: linear-gradient(135deg, var(--accent) 0%, #9167ff 100%);
+            color: white;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 14px 28px rgba(122, 77, 255, 0.26);
+        }
+
+        .search-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 32px rgba(122, 77, 255, 0.32);
+        }
+
+        .search-btn:disabled {
+            cursor: progress;
+            opacity: 0.8;
+            transform: none;
+        }
+
+        .helper-text {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .status-banner {
+            margin-top: 14px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            color: #dfd6ff;
+            background: var(--accent-soft);
+            border: 1px solid rgba(122, 77, 255, 0.22);
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .status-banner.visible {
+            display: inline-flex;
+        }
+
+        .error-box {
+            margin-top: 14px;
+            display: none;
+            color: #ffd3dc;
+            background: rgba(255, 111, 145, 0.12);
+            border: 1px solid rgba(255, 111, 145, 0.22);
+            padding: 12px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .error-box.visible {
+            display: block;
+        }
+
+        .downloads-header {
+            margin-bottom: 16px;
+        }
+
+        .downloads-header h2,
+        .terminal-header h2 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .downloads-header p,
+        .terminal-header p {
+            margin: 8px 0 0;
+            color: var(--muted);
+        }
+
+        .download-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .download-card {
+            padding: 18px 18px 16px;
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .card-meta {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status-pill.running {
+            background: rgba(122, 77, 255, 0.18);
+            color: #e0d5ff;
+            border-color: rgba(122, 77, 255, 0.24);
+        }
+
+        .status-pill.completed {
+            background: rgba(47, 201, 143, 0.14);
+            color: var(--success);
+            border-color: rgba(47, 201, 143, 0.24);
+        }
+
+        .status-pill.failed {
+            background: rgba(255, 111, 145, 0.14);
+            color: var(--danger);
+            border-color: rgba(255, 111, 145, 0.24);
+        }
+
+        .progress-wrap {
+            margin-top: 16px;
+        }
+
+        .progress-bar-track {
+            height: 12px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--accent) 0%, #a585ff 100%);
+            transition: width 0.35s ease;
+        }
+
+        .progress-line {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .cancel-btn {
+            margin-top: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text);
+            padding: 10px 14px;
+            cursor: pointer;
+        }
+
+        .cancel-btn:disabled {
+            cursor: default;
+            opacity: 0.55;
+        }
+
+        .terminal-panel {
+            margin-top: 20px;
+        }
+
+        .terminal-header {
+            margin-bottom: 12px;
+        }
+
+        pre {
+            margin: 0;
+            max-height: 320px;
+            overflow: auto;
+            padding: 18px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(9, 12, 22, 0.98), rgba(5, 7, 13, 0.98));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #d5dcff;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .empty {
+            color: var(--muted);
+        }
+
+        @media (max-width: 900px) {
+            .search-row {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 680px) {
+            .header,
+            .card-top {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .tabs {
+                width: 100%;
+            }
+
+            .tab-btn {
+                flex: 1;
+            }
+
+            .search-row,
+            .field.inline-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="header">
+            <div class="brand">
+                <h1>Manga Downloader</h1>
+                <span class="version">v2.0</span>
+            </div>
+            <nav class="tabs">
+                <button type="button" class="tab-btn active" data-target="search-tab">Search</button>
+                <button type="button" class="tab-btn" data-target="downloads-tab">Downloads</button>
+            </nav>
+        </header>
+
+        <section id="search-tab" class="section active">
+            <div class="search-panel">
+                <form id="download-form">
+                    <div class="search-row">
+                        <div class="field">
+                            <label for="manga_name">Search Manga</label>
+                            <input id="manga_name" name="manga_name" type="text" placeholder='Search manga... (e.g. "one piece")' required>
+                        </div>
+
+                        <div class="field">
+                            <label for="format_choice">Format</label>
+                            <select id="format_choice" name="format_choice">
+                                {% for value, label in format_options.items() %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="download_type">Download Type</label>
+                            <select id="download_type" name="download_type">
+                                {% for value, label in download_options.items() %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label>&nbsp;</label>
+                            <button type="submit" class="search-btn" id="download-btn">Download</button>
+                        </div>
+
+                        <div id="range-fields" class="field full inline-group" style="display:none;">
+                            <div class="field">
+                                <label for="start_chapter">Start Chapter</label>
+                                <input id="start_chapter" name="start_chapter" type="text" placeholder="e.g. 1">
+                            </div>
+                            <div class="field">
+                                <label for="end_chapter">End Chapter</label>
+                                <input id="end_chapter" name="end_chapter" type="text" placeholder="e.g. 25">
+                            </div>
+                        </div>
+
+                        <div id="single-field" class="field full" style="display:none;">
+                            <label for="single_chapter">Single Chapter</label>
+                            <input id="single_chapter" name="single_chapter" type="text" placeholder="e.g. 7">
+                        </div>
+                    </div>
+                </form>
+
+                <p class="helper-text">The wrapper sends the same answers the CLI expects, then shows the terminal output below.</p>
+                <div id="status-banner" class="status-banner">Download is running in the wrapper...</div>
+                <div id="error-box" class="error-box"></div>
+            </div>
+
+            <div class="terminal-panel">
+                <div class="terminal-header">
+                    <h2>Terminal Logs</h2>
+                    <p>Captured stdout and stderr from the existing downloader.</p>
+                </div>
+                <pre id="terminal-output" class="empty">Run a download to see terminal logs here.</pre>
+            </div>
+        </section>
+
+        <section id="downloads-tab" class="section">
+            <div class="downloads-header">
+                <h2>Downloads</h2>
+                <p>Recent download jobs rendered as product-style status cards.</p>
+            </div>
+            <div id="download-list" class="download-list">
+                {% for item in recent_downloads %}
+                <article class="download-card">
+                    <div class="card-top">
+                        <div>
+                            <h3 class="card-title">{{ item.title }}</h3>
+                            <div class="card-meta">
+                                <span>{{ item.chapters_count }} chapter{{ '' if item.chapters_count == 1 else 's' }}</span>
+                                <span class="pill">{{ item.format_label }}</span>
+                                <span>#{{ item.id }}</span>
+                            </div>
+                        </div>
+                        <span class="pill status-pill {{ item.status_tone|lower }}">{{ item.status }}</span>
+                    </div>
+                    <div class="progress-wrap">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar" style="width: {{ item.percent }}%;"></div>
+                        </div>
+                        <div class="progress-line">
+                            <span>{{ item.progress_text }}</span>
+                            <span>{{ item.percent }}%</span>
+                        </div>
+                    </div>
+                    <button class="cancel-btn" type="button" disabled>Cancel</button>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById("download-form");
+        const downloadType = document.getElementById("download_type");
+        const rangeFields = document.getElementById("range-fields");
+        const singleField = document.getElementById("single-field");
+        const downloadBtn = document.getElementById("download-btn");
+        const statusBanner = document.getElementById("status-banner");
+        const errorBox = document.getElementById("error-box");
+        const terminalOutput = document.getElementById("terminal-output");
+        const downloadList = document.getElementById("download-list");
+        const tabButtons = document.querySelectorAll(".tab-btn");
+
+        let progressTimer = null;
+        let activeCard = null;
+
+        function setActiveTab(targetId) {
+            document.querySelectorAll(".section").forEach((section) => {
+                section.classList.toggle("active", section.id === targetId);
+            });
+
+            tabButtons.forEach((button) => {
+                button.classList.toggle("active", button.dataset.target === targetId);
+            });
+        }
+
+        function updateDownloadFields() {
+            const mode = downloadType.value;
+            rangeFields.style.display = mode === "2" ? "grid" : "none";
+            singleField.style.display = mode === "3" ? "flex" : "none";
+        }
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.add("visible");
+        }
+
+        function clearError() {
+            errorBox.textContent = "";
+            errorBox.classList.remove("visible");
+        }
+
+        function createDownloadCard(title, formatLabel) {
+            const card = document.createElement("article");
+            card.className = "download-card";
+            card.innerHTML = `
+                <div class="card-top">
+                    <div>
+                        <h3 class="card-title">${title}</h3>
+                        <div class="card-meta">
+                            <span>Preparing chapters</span>
+                            <span class="pill">${formatLabel}</span>
+                            <span>#pending</span>
+                        </div>
+                    </div>
+                    <span class="pill status-pill running">RUNNING</span>
+                </div>
+                <div class="progress-wrap">
+                    <div class="progress-bar-track">
+                        <div class="progress-bar" style="width: 8%;"></div>
+                    </div>
+                    <div class="progress-line">
+                        <span class="progress-copy">993 / 6183 pages (16%)</span>
+                        <span class="progress-percent">8%</span>
+                    </div>
+                </div>
+                <button class="cancel-btn" type="button">Cancel</button>
+            `;
+
+            const cancelBtn = card.querySelector(".cancel-btn");
+            cancelBtn.addEventListener("click", () => {
+                cancelBtn.textContent = "Cancelled (UI only)";
+                cancelBtn.disabled = true;
+            });
+
+            downloadList.prepend(card);
+            return card;
+        }
+
+        function updateRunningCard(card, percent) {
+            card.querySelector(".progress-bar").style.width = `${percent}%`;
+            card.querySelector(".progress-percent").textContent = `${percent}%`;
+
+            const simulatedTotal = 6183;
+            const simulatedDone = Math.floor((simulatedTotal * percent) / 100);
+            card.querySelector(".progress-copy").textContent = `${simulatedDone} / ${simulatedTotal} pages (${percent}%)`;
+        }
+
+        function finalizeCard(card, record) {
+            const meta = card.querySelector(".card-meta");
+            meta.innerHTML = `
+                <span>${record.chapters_count} chapter${record.chapters_count === 1 ? "" : "s"}</span>
+                <span class="pill">${record.format_label}</span>
+                <span>#${record.id}</span>
+            `;
+
+            const status = card.querySelector(".status-pill");
+            status.className = `pill status-pill ${record.status_tone.toLowerCase()}`;
+            status.textContent = record.status;
+
+            card.querySelector(".progress-bar").style.width = `${record.percent}%`;
+            card.querySelector(".progress-percent").textContent = `${record.percent}%`;
+            card.querySelector(".progress-copy").textContent = record.progress_text;
+
+            const cancelBtn = card.querySelector(".cancel-btn");
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = "Cancel";
+        }
+
+        function rerenderDownloadList(items) {
+            downloadList.innerHTML = "";
+            items.forEach((item) => {
+                const card = document.createElement("article");
+                card.className = "download-card";
+                card.innerHTML = `
+                    <div class="card-top">
+                        <div>
+                            <h3 class="card-title">${item.title}</h3>
+                            <div class="card-meta">
+                                <span>${item.chapters_count} chapter${item.chapters_count === 1 ? "" : "s"}</span>
+                                <span class="pill">${item.format_label}</span>
+                                <span>#${item.id}</span>
+                            </div>
+                        </div>
+                        <span class="pill status-pill ${item.status_tone.toLowerCase()}">${item.status}</span>
+                    </div>
+                    <div class="progress-wrap">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar" style="width: ${item.percent}%;"></div>
+                        </div>
+                        <div class="progress-line">
+                            <span>${item.progress_text}</span>
+                            <span>${item.percent}%</span>
+                        </div>
+                    </div>
+                    <button class="cancel-btn" type="button" disabled>Cancel</button>
+                `;
+                downloadList.appendChild(card);
+            });
+        }
+
+        tabButtons.forEach((button) => {
+            button.addEventListener("click", () => setActiveTab(button.dataset.target));
+        });
+
+        downloadType.addEventListener("change", updateDownloadFields);
+        updateDownloadFields();
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearError();
+
+            const formData = new FormData(form);
+            const mangaName = formData.get("manga_name");
+            const formatLabel = document.getElementById("format_choice").options[document.getElementById("format_choice").selectedIndex].text;
+
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = "Downloading...";
+            statusBanner.classList.add("visible");
+            terminalOutput.classList.remove("empty");
+            terminalOutput.textContent = "Launching downloader...\nWaiting for CLI output...";
+            setActiveTab("downloads-tab");
+
+            if (progressTimer) {
+                clearInterval(progressTimer);
+            }
+
+            activeCard = createDownloadCard(mangaName, formatLabel);
+            let simulatedPercent = 8;
+            updateRunningCard(activeCard, simulatedPercent);
+            progressTimer = setInterval(() => {
+                simulatedPercent = Math.min(92, simulatedPercent + 4);
+                updateRunningCard(activeCard, simulatedPercent);
+            }, 700);
+
+            try {
+                const response = await fetch("/", {
+                    method: "POST",
+                    body: formData
+                });
+                const payload = await response.json();
+
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || "Download failed.");
+                }
+
+                clearInterval(progressTimer);
+                progressTimer = null;
+                finalizeCard(activeCard, payload.record);
+                rerenderDownloadList(payload.recent_downloads);
+                terminalOutput.textContent = payload.output;
+                statusBanner.classList.remove("visible");
+                setActiveTab("downloads-tab");
+            } catch (error) {
+                clearInterval(progressTimer);
+                progressTimer = null;
+                terminalOutput.textContent = error.message;
+                showError(error.message);
+
+                if (activeCard) {
+                    const status = activeCard.querySelector(".status-pill");
+                    status.className = "pill status-pill failed";
+                    status.textContent = "FAILED";
+                    activeCard.querySelector(".cancel-btn").disabled = true;
+                    activeCard.querySelector(".progress-copy").textContent = "Download failed before completion";
+                }
+            } finally {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = "Download";
+                statusBanner.classList.remove("visible");
+            }
+        });
+    </script>
+</body>
+</html>
