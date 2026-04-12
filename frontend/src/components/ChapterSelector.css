@@ -1,0 +1,240 @@
+.chapter-selector {
+  position: relative;
+  padding-bottom: 80px;
+}
+
+.cs-header {
+  margin-bottom: 20px;
+}
+
+.back-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.cs-title-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.cs-cover {
+  width: 60px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.cs-meta {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.cs-verified {
+  color: var(--success);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.no-chapters-warning {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--danger);
+  background: rgba(225, 112, 85, 0.08);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+}
+
+.cs-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.cs-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ctrl-btn {
+  padding: 6px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.ctrl-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.selected-count {
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.cs-format {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.cs-format label {
+  color: var(--text-dim);
+}
+
+.cs-format select {
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chapter-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.9rem;
+}
+
+.chapter-item:hover {
+  background: var(--bg-hover);
+}
+
+.chapter-item.selected {
+  border-color: var(--accent);
+  background: rgba(108, 92, 231, 0.08);
+}
+
+.chapter-item.zero-pages {
+  opacity: 0.6;
+}
+
+.ch-checkbox {
+  font-size: 1.2rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.chapter-item.selected .ch-checkbox {
+  color: var(--accent);
+}
+
+.ch-info {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ch-num {
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.ch-title {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ch-meta {
+  display: flex;
+  gap: 10px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.ch-warning {
+  color: var(--warning);
+}
+
+.ch-group {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 24px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  z-index: 100;
+}
+
+.download-btn {
+  padding: 12px 40px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.2s;
+  min-width: 300px;
+}
+
+.download-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.download-btn:disabled {
+  opacity: 0.6;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 60px 0;
+  font-size: 1.1rem;
+}

@@ -1,0 +1,169 @@
+.download-queue {
+  max-width: 100%;
+}
+
+.dq-title {
+  font-size: 1.3rem;
+  margin-bottom: 20px;
+}
+
+.queue-empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-dim);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+}
+
+.queue-empty h3 {
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.job-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.job-card.job-failed {
+  border-color: var(--danger);
+  background: rgba(225, 112, 85, 0.04);
+}
+
+.job-card.job-completed {
+  border-color: var(--success);
+}
+
+.job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.job-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.job-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.job-details {
+  display: flex;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.job-format {
+  padding: 1px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.job-id {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.progress-container {
+  margin-bottom: 10px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a29bfe);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.progress-text {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.job-complete {
+  font-size: 0.9rem;
+  color: var(--success);
+  margin-bottom: 8px;
+}
+
+.partial-warning {
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+
+.job-failed-detail {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  background: rgba(225, 112, 85, 0.08);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.job-failed-detail p {
+  color: var(--text-dim);
+  margin-top: 4px;
+  font-size: 0.8rem;
+}
+
+.job-failed-icon {
+  font-size: 1.4rem;
+  color: var(--danger);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.job-error {
+  font-size: 0.85rem;
+  color: var(--danger);
+  background: rgba(225, 112, 85, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.cancel-btn {
+  padding: 6px 16px;
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: rgba(225, 112, 85, 0.1);
+}

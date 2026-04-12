@@ -1,6 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+env/
+venv/
+.venv/
+
+# Downloads
+downloads/
+*.pdf
+*.cbz
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Config overrides
+config.local.yaml
+
+# Logs
+*.log
+
+# Cache
+.cache.json
+
+# IDE
+.vscode/
 .idea/
+
+# Legacy
 man/
 test.py
-venv/
-__pycache__/
-env/

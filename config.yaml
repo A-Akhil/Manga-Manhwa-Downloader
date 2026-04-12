@@ -1,0 +1,21 @@
+# Manga Downloader Configuration
+
+download:
+  max_concurrent_downloads: 15
+  max_concurrent_chapters: 5
+  timeout: 30
+  retry_attempts: 5
+  retry_base_delay: 1.0
+  output_dir: "./downloads"
+
+search:
+  fuzzy_threshold: 60
+  max_results: 10
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+logging:
+  level: "INFO"
+  file: "manga_downloader.log"
