@@ -4,6 +4,15 @@ from telemetry import *
 import os
 import zipfile
 import img2pdf
+import re
+
+
+def chapter_folder_sort_key(chapter_folder):
+    text = str(chapter_folder).strip().lower()
+    match = re.match(r"^(\d+)([a-z]*)$", text)
+    if not match:
+        return (10**9, text)
+    return (int(match.group(1)), match.group(2))
 
 def create_archive(series_name, file_extension):
     with timed_block("archive.create", series=series_name, mode=file_extension):
@@ -14,7 +23,7 @@ def create_archive(series_name, file_extension):
             # Ensure the output directory exists, or create it
             os.makedirs(output_path, exist_ok=True)
 
-            for chapter_folder in os.listdir(series_path):
+            for chapter_folder in sorted(os.listdir(series_path), key=chapter_folder_sort_key):
                 chapter_path = os.path.join(series_path, chapter_folder)
 
                 # Check if the item is a directory before proceeding

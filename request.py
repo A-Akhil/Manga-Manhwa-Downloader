@@ -47,6 +47,20 @@ def send_request(url, binary=False):
     increment_counter(f"http.status.{request.status_code}")
     return request
 
+
+def send_request_optional(url, binary=False):
+    increment_counter("http.request.total")
+    with timed_block("http.request", url=url, binary=binary):
+        try:
+            request = get_http_session().get(url, stream=binary, timeout=HTTP_TIMEOUT_SECONDS)
+        except Exception as err:
+            increment_counter("http.request.error")
+            log_event("http_request_exception", url=url, error=type(err).__name__)
+            return None
+
+    increment_counter(f"http.status.{request.status_code}")
+    return request
+
 def not_released_yet(seriesName, chpNum):
     manga_url = get_url(seriesName, chpNum)
     with timed_block("chapter.release_check", series=seriesName, chapter=chpNum):

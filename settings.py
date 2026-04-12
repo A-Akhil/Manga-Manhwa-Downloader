@@ -1,6 +1,10 @@
 import os
 
 PROVIDER = "https://images.mangafreak.net/mangas/"
+MANGA_INDEX_BASE_URLS = [
+	"https://w13.mangafreak.net/Manga/",
+	"https://mangafreak.net/Manga/",
+]
 LOCAL_PATH = os.path.join(os.getcwd(), "output")
 INITAL_PAGE = 1
 SUCCESS_MSG = "The Chapter has been successfully downloaded"
