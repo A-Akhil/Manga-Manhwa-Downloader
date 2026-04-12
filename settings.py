@@ -1,7 +1,7 @@
 import os
 
 PROVIDER = "https://images.mangafreak.net/mangas/"
-LOCAL_PATH = os.getcwd()
+LOCAL_PATH = os.path.join(os.getcwd(), "output")
 INITAL_PAGE = 1
 SUCCESS_MSG = "The Chapter has been successfully downloaded"
 DOWNLOADING_MSG = "Currently downloading page "
@@ -10,3 +10,14 @@ DOESNT_EXIST = "This manga doesn't exist in the database"
 REQUEST_ERROR = "There was an error during the HTTP requests"
 EST_MAX_DIGITS = 3
 FILE_EXT = ".jpg"
+
+# HTTP tuning
+HTTP_TIMEOUT_SECONDS = 20
+HTTP_RETRY_TOTAL = 2
+HTTP_BACKOFF_FACTOR = 0.3
+HTTP_POOL_CONNECTIONS = 20
+HTTP_POOL_MAXSIZE = 50
+
+# Concurrency tuning
+MAX_CHAPTER_WORKERS = 3
+MAX_PAGE_THREADS = 8
