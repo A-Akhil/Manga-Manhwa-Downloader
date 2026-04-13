@@ -190,15 +190,6 @@ def resolve_series_name(user_input):
             return entered
         return entered
 
-    if len(candidates) == 1:
-        only_slug = candidates[0]["slug"]
-        if chapter_exists(only_slug, "1"):
-            cache[cache_key] = only_slug
-            _save_title_cache(cache)
-            print(f"Resolved series: {only_slug}")
-            return only_slug
-        return entered
-
     print("Possible matches:")
     top = candidates[:8]
     for idx, item in enumerate(top, start=1):
