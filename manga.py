@@ -14,7 +14,8 @@ import string
 import json
 import html
 import difflib
-from urllib.parse import quote, urlparse
+import hashlib
+from urllib.parse import quote, urlparse, urljoin
 
 # Toggle profiling/telemetry logs from here.
 # Keep False for normal user runs.
@@ -33,7 +34,19 @@ def chapter_sort_key(chapter_id):
 
 
 def _title_cache_path():
-    return os.path.join(LOCAL_PATH, ".title_alias_cache.json")
+    return os.path.join(CACHE_PATH, "title_alias_cache.json")
+
+
+def _title_options_cache_path():
+    return os.path.join(CACHE_PATH, "title_options_cache.json")
+
+
+def _title_image_map_path():
+    return os.path.join(CACHE_PATH, "title_image_map.json")
+
+
+def _title_image_dir_path():
+    return os.path.join(CACHE_PATH, "title_images")
 
 
 def _normalize_title_key(text):
@@ -52,9 +65,33 @@ def _load_title_cache():
         return {}
 
 
+def _load_title_options_cache():
+    cache_path = _title_options_cache_path()
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_title_image_map():
+    map_path = _title_image_map_path()
+    if not os.path.exists(map_path):
+        return {}
+    try:
+        with open(map_path, "r", encoding="utf-8") as map_file:
+            payload = json.load(map_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
 def _save_title_cache(cache_data):
     try:
-        os.makedirs(LOCAL_PATH, exist_ok=True)
+        os.makedirs(CACHE_PATH, exist_ok=True)
         cache_path = _title_cache_path()
         tmp_path = cache_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as cache_file:
@@ -64,6 +101,77 @@ def _save_title_cache(cache_data):
         pass
 
 
+def _save_title_options_cache(cache_data):
+    try:
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        cache_path = _title_options_cache_path()
+        tmp_path = cache_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as cache_file:
+            json.dump(cache_data, cache_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        pass
+
+
+def _save_title_image_map(map_data):
+    try:
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        map_path = _title_image_map_path()
+        tmp_path = map_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as map_file:
+            json.dump(map_data, map_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, map_path)
+    except Exception:
+        pass
+
+
+def _cache_title_option_images(candidates):
+    if not candidates:
+        return candidates
+
+    image_map = _load_title_image_map()
+    changed = False
+    image_dir = _title_image_dir_path()
+    os.makedirs(image_dir, exist_ok=True)
+
+    for candidate in candidates:
+        thumbnail_url = candidate.get("thumbnail")
+        if not thumbnail_url:
+            continue
+
+        mapped_relative = image_map.get(thumbnail_url)
+        mapped_absolute = os.path.join(os.getcwd(), mapped_relative) if mapped_relative else None
+
+        if mapped_relative and mapped_absolute and os.path.exists(mapped_absolute):
+            candidate["thumbnail_cached"] = mapped_relative
+            continue
+
+        ext_match = re.search(r"\.(jpg|jpeg|png|webp)(?:\?|$)", thumbnail_url, re.IGNORECASE)
+        ext = "." + ext_match.group(1).lower() if ext_match else ".img"
+        file_name = hashlib.sha1(thumbnail_url.encode("utf-8")).hexdigest() + ext
+        relative_path = os.path.join("cache", "title_images", file_name)
+        absolute_path = os.path.join(os.getcwd(), relative_path)
+
+        response = send_request_optional(thumbnail_url, binary=True)
+        if response is None or response.status_code != 200:
+            continue
+
+        try:
+            with open(absolute_path, "wb") as image_file:
+                image_file.write(response.content)
+        except Exception:
+            continue
+
+        image_map[thumbnail_url] = relative_path
+        candidate["thumbnail_cached"] = relative_path
+        changed = True
+
+    if changed:
+        _save_title_image_map(image_map)
+
+    return candidates
+
+
 def _extract_slug_from_href(href):
     match = re.search(r"/Manga/([^\"'/?#]+)", href)
     if not match:
@@ -71,9 +179,10 @@ def _extract_slug_from_href(href):
     return match.group(1).strip()
 
 
-def _collect_title_candidates(search_html):
+def _collect_title_candidates(search_html, host_base):
     anchor_pattern = re.compile(r"<a[^>]+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
     tag_pattern = re.compile(r"<[^>]+>")
+    image_pattern = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE | re.DOTALL)
 
     scoped_html = search_html
     start_marker = "Manga/Manhwa Result"
@@ -93,11 +202,13 @@ def _collect_title_candidates(search_html):
         title = re.sub(r"\s+", " ", html.unescape(tag_pattern.sub(" ", inner))).strip()
         if not title:
             title = slug.replace("_", " ").title()
+        image_match = image_pattern.search(inner)
+        thumbnail = urljoin(host_base, image_match.group(1)) if image_match else None
         key = slug.lower()
         if key in seen:
             continue
         seen.add(key)
-        items.append({"slug": slug, "title": title})
+        items.append({"slug": slug, "title": title, "thumbnail": thumbnail})
     return items
 
 
@@ -120,6 +231,12 @@ def _discover_title_candidates(user_input):
     cleaned = user_input.strip()
     if not cleaned:
         return []
+
+    query_key = _normalize_title_key(cleaned)
+    options_cache = _load_title_options_cache()
+    cached_options = options_cache.get(query_key)
+    if isinstance(cached_options, list) and cached_options:
+        return cached_options
 
     tokens = re.findall(r"[a-z0-9]+", cleaned.lower())
     stop_words = {"a", "an", "the", "of", "to", "no"}
@@ -155,7 +272,7 @@ def _discover_title_candidates(user_input):
                     continue
 
                 html_text = response.text
-                for candidate in _collect_title_candidates(html_text):
+                for candidate in _collect_title_candidates(html_text, host):
                     slug_key = candidate["slug"].lower()
                     if slug_key in seen or slug_key in seen_variant:
                         continue
@@ -164,10 +281,23 @@ def _discover_title_candidates(user_input):
                     found_for_variant.append(candidate)
 
         if found_for_variant:
+            found_for_variant = _cache_title_option_images(found_for_variant)
             all_candidates.extend(found_for_variant)
+            options_cache[query_key] = all_candidates
+            _save_title_options_cache(options_cache)
             return all_candidates
 
+    all_candidates = _cache_title_option_images(all_candidates)
+    options_cache[query_key] = all_candidates
+    _save_title_options_cache(options_cache)
     return all_candidates
+
+
+def fetch_title_options(query_text, limit=None):
+    options = _discover_title_candidates(query_text)
+    if limit is None:
+        return options
+    return options[:max(1, int(limit))]
 
 
 def resolve_series_name(user_input):

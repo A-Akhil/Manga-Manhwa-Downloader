@@ -6,6 +6,7 @@ MANGA_INDEX_BASE_URLS = [
 	"https://mangafreak.net/Manga/",
 ]
 LOCAL_PATH = os.path.join(os.getcwd(), "output")
+CACHE_PATH = os.path.join(os.getcwd(), "cache")
 INITAL_PAGE = 1
 SUCCESS_MSG = "The Chapter has been successfully downloaded"
 DOWNLOADING_MSG = "Currently downloading page "
