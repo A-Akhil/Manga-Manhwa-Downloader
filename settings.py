@@ -25,3 +25,17 @@ HTTP_POOL_MAXSIZE = 50
 # Concurrency tuning
 MAX_CHAPTER_WORKERS = 3
 MAX_PAGE_THREADS = 8
+
+# Async downloader tuning
+# Set to 0 for automatic tuning based on system CPU.
+# Set positive integers to force fixed limits.
+ASYNC_CHAPTER_CONCURRENCY = 0
+ASYNC_PAGE_CONCURRENCY = 0
+
+# Progress output tuning
+# PROGRESS_MODE: "none" | "chapter" | "detailed"
+# - none: fastest, no console progress lines
+# - chapter: prints chapter start + completion summary
+# - detailed: prints periodic in-chapter progress
+PROGRESS_MODE = "chapter"
+PROGRESS_UPDATE_EVERY = 10

@@ -4,6 +4,8 @@ from request import *
 from stringHelpers import *
 from output_cbz_pdf import *
 from telemetry import *
+from async_download_engine import run_async_download
+import asyncio
 import os
 import threading
 import math
@@ -301,21 +303,7 @@ def download_manga_by_chapters(seriesName, chapter_ids):
 
     chapter_ids = sorted(chapter_ids, key=chapter_sort_key)
     with timed_block("manga.download", series=seriesName, chapter_count=len(chapter_ids)):
-        max_workers = min(len(chapter_ids), MAX_CHAPTER_WORKERS)
-        log_event("manga_download_pool", max_workers=max_workers)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for chapter_id in chapter_ids:
-                last_page = get_last_page_number(seriesName, chapter_id)
-                print(f"Currently downloading Chapter #{chapter_id}, Last Page: {last_page}")
-                future = executor.submit(download_chp_thread, seriesName, chapter_id, 1, last_page)
-                futures.append(future)
-
-            # Wait for all chapter downloads to complete
-            for future in futures:
-                future.result()
-
-        increment_counter("manga.download.success")
+        asyncio.run(run_async_download(seriesName, chapter_ids))
 
 def get_last_chapter_number(manga):
     # Start with an initial guess (e.g., a large number)
@@ -381,9 +369,7 @@ def main():
             elif c == 3:
                 chp = input("Enter chapter number:").strip().lower()
                 log_event("input.single_chapter", chapter=chp)
-                last_page = get_last_page_number(manga, chp)
-                print(f"Currently downloading Chapter #{chp}, Last Page: {last_page}")
-                download_chp_thread(manga, chp, 1, last_page)  # Pass start_page and end_page as 1 and last_page
+                download_manga_by_chapters(manga, [chp])
                 break
 
         if create_archive_input in [1, 2, 3, 4]:
