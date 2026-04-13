@@ -33,6 +33,17 @@ RETRY_ATTEMPTS = 2
 RETRY_BASE_DELAY = 0.4
 
 
+async def _emit_progress(progress_callback, payload):
+    if progress_callback is None:
+        return
+    try:
+        result = progress_callback(payload)
+        if asyncio.iscoroutine(result):
+            await result
+    except Exception:
+        pass
+
+
 def _resolve_async_limits(chapter_total):
     cpu_cores = os.cpu_count() or 4
 
@@ -445,6 +456,9 @@ async def _run_page_lane(
     progress_mode,
     total_jobs,
     completed_counter,
+    progress_callback,
+    chapter_index,
+    chapter_total,
 ):
     local_gate = asyncio.Semaphore(max(1, lane_window))
     async def _run_job(job):
@@ -472,12 +486,38 @@ async def _run_page_lane(
             completed_counter[0] += 1
             if completed_counter[0] == 1 or completed_counter[0] == total_jobs or completed_counter[0] % update_step == 0:
                 print(f"Chapter #{chapter_id} progress: {completed_counter[0]}/{total_jobs}")
+                await _emit_progress(
+                    progress_callback,
+                    {
+                        "stage": "downloading",
+                        "event": "chapter_progress",
+                        "chapter_id": str(chapter_id),
+                        "chapter_index": chapter_index,
+                        "chapter_total": chapter_total,
+                        "page_current": completed_counter[0],
+                        "page_total": total_jobs,
+                    },
+                )
             if not ok:
                 failed_jobs.append(job)
     else:
         results = await asyncio.gather(*tasks)
+        update_step = max(1, PROGRESS_UPDATE_EVERY)
         for job, ok in results:
             completed_counter[0] += 1
+            if completed_counter[0] == 1 or completed_counter[0] == total_jobs or completed_counter[0] % update_step == 0:
+                await _emit_progress(
+                    progress_callback,
+                    {
+                        "stage": "downloading",
+                        "event": "chapter_progress",
+                        "chapter_id": str(chapter_id),
+                        "chapter_index": chapter_index,
+                        "chapter_total": chapter_total,
+                        "page_current": completed_counter[0],
+                        "page_total": total_jobs,
+                    },
+                )
             if not ok:
                 failed_jobs.append(job)
 
@@ -493,6 +533,9 @@ async def _download_with_retry_lane(
     resume_state,
     progress_mode,
     chapter_parallelism,
+    progress_callback,
+    chapter_index,
+    chapter_total,
 ):
     if not jobs:
         return 0, 0
@@ -512,6 +555,9 @@ async def _download_with_retry_lane(
         progress_mode,
         total_jobs,
         completed_counter,
+        progress_callback,
+        chapter_index,
+        chapter_total,
     )
 
     attempt = 1
@@ -530,6 +576,9 @@ async def _download_with_retry_lane(
             progress_mode,
             total_jobs,
             completed_counter,
+            progress_callback,
+            chapter_index,
+            chapter_total,
         )
         attempt += 1
 
@@ -566,6 +615,9 @@ async def _download_one_chapter(
     controller,
     resume_state,
     chapter_parallelism,
+    progress_callback,
+    chapter_index,
+    chapter_total,
 ):
     async with chapter_gate:
         chapter_started = time.perf_counter()
@@ -576,6 +628,17 @@ async def _download_one_chapter(
             increment_counter("chapter.download.skipped_resume_chapter")
             if progress_mode in {"chapter", "detailed"}:
                 print(f"Chapter #{chapter_id} already completed (resume lock)")
+            await _emit_progress(
+                progress_callback,
+                {
+                    "stage": "downloading",
+                    "event": "chapter_skipped",
+                    "chapter_id": str(chapter_id),
+                    "chapter_index": chapter_index,
+                    "chapter_total": chapter_total,
+                    "reason": "resume_lock",
+                },
+            )
             record_duration("chapter.download", time.perf_counter() - chapter_started)
             return
 
@@ -591,6 +654,18 @@ async def _download_one_chapter(
         if progress_mode in {"chapter", "detailed"} and estimated_last_page > 0:
             print(f"Processing Chapter #{chapter_id}, Last Page: {estimated_last_page}")
 
+        await _emit_progress(
+            progress_callback,
+            {
+                "stage": "downloading",
+                "event": "chapter_started",
+                "chapter_id": str(chapter_id),
+                "chapter_index": chapter_index,
+                "chapter_total": chapter_total,
+                "page_total": max(0, len(jobs)),
+            },
+        )
+
         if not jobs:
             increment_counter("chapter.download.skipped_no_pages")
             record_duration("chapter.download", time.perf_counter() - chapter_started)
@@ -605,6 +680,9 @@ async def _download_one_chapter(
             resume_state,
             progress_mode,
             chapter_parallelism,
+            progress_callback,
+            chapter_index,
+            chapter_total,
         )
 
         if progress_mode == "chapter":
@@ -617,10 +695,24 @@ async def _download_one_chapter(
             increment_counter("chapter.download.success")
             await resume_state.mark_chapter_completed(chapter_id)
 
+        await _emit_progress(
+            progress_callback,
+            {
+                "stage": "downloading",
+                "event": "chapter_completed",
+                "chapter_id": str(chapter_id),
+                "chapter_index": chapter_index,
+                "chapter_total": chapter_total,
+                "page_total": len(jobs),
+                "page_success": success_count,
+                "page_failed": failed_count,
+            },
+        )
+
         record_duration("chapter.download", time.perf_counter() - chapter_started)
 
 
-async def run_async_download(series_name, chapter_ids, enable_resume=None, checkpoint_every_success=None):
+async def run_async_download(series_name, chapter_ids, enable_resume=None, checkpoint_every_success=None, progress_callback=None):
     if not chapter_ids:
         return
 
@@ -650,6 +742,15 @@ async def run_async_download(series_name, chapter_ids, enable_resume=None, check
         page_setting=ASYNC_PAGE_CONCURRENCY,
     )
     log_event("resume_checkpointing", enabled=enable_resume, checkpoint_every_success=checkpoint_every_success)
+    await _emit_progress(
+        progress_callback,
+        {
+            "stage": "downloading",
+            "event": "download_engine_started",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+        },
+    )
 
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         metadata_futures = {
@@ -677,12 +778,24 @@ async def run_async_download(series_name, chapter_ids, enable_resume=None, check
                     adaptive_controller,
                     resume_state,
                     chapter_limit,
+                    progress_callback,
+                    idx,
+                    len(chapter_ids),
                 )
             )
-            for chapter_id in chapter_ids
+            for idx, chapter_id in enumerate(chapter_ids, start=1)
         ]
         await asyncio.gather(*work)
 
     increment_counter("manga.download.success")
     await resume_state.finalize(completed=True)
+    await _emit_progress(
+        progress_callback,
+        {
+            "stage": "downloading",
+            "event": "download_engine_completed",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+        },
+    )
     record_duration("manga.download", time.perf_counter() - download_started)

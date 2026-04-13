@@ -20,6 +20,21 @@ from urllib.parse import quote, urlparse, urljoin
 # Toggle profiling/telemetry logs from here.
 # Keep False for normal user runs.
 TELEMETRY_ENABLED = False
+ARCHIVE_MODE_BY_CHOICE = {
+    "1": "pdf",
+    "2": "cbz",
+    "3": "both",
+    "4": "images",
+}
+
+
+def _emit_progress(progress_callback, payload):
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(payload)
+    except Exception:
+        pass
 
 
 def chapter_sort_key(chapter_id):
@@ -345,10 +360,238 @@ def resolve_series_name(user_input):
     return selected_slug
 
 
+def resolve_series_name_non_interactive(user_input):
+    entered = user_input.strip()
+    if not entered:
+        return {
+            "ok": False,
+            "error": "Manga name is required",
+            "series": None,
+            "choices": [],
+        }
+
+    cache = _load_title_cache()
+    cache_key = _normalize_title_key(entered)
+    cached_slug = cache.get(cache_key)
+    if cached_slug and chapter_exists(cached_slug, "1"):
+        return {
+            "ok": True,
+            "series": cached_slug,
+            "source": "cache",
+            "choices": [],
+        }
+
+    if chapter_exists(entered, "1"):
+        return {
+            "ok": True,
+            "series": entered,
+            "source": "direct",
+            "choices": [],
+        }
+
+    candidates = _discover_title_candidates(entered)
+    if not candidates:
+        return {
+            "ok": False,
+            "error": "No matching manga title found",
+            "series": None,
+            "choices": [],
+        }
+
+    query_key = _normalize_title_key(entered)
+    exact = [item for item in candidates if _normalize_title_key(item.get("title", "")) == query_key]
+    if len(exact) == 1:
+        selected = exact[0]["slug"]
+        cache[cache_key] = selected
+        _save_title_cache(cache)
+        return {
+            "ok": True,
+            "series": selected,
+            "source": "exact_title_match",
+            "choices": [],
+        }
+
+    if len(candidates) == 1:
+        selected = candidates[0]["slug"]
+        cache[cache_key] = selected
+        _save_title_cache(cache)
+        return {
+            "ok": True,
+            "series": selected,
+            "source": "single_candidate",
+            "choices": [],
+        }
+
+    return {
+        "ok": False,
+        "error": "Ambiguous manga title. Pick one of the provided choices.",
+        "series": None,
+        "choices": candidates[:8],
+    }
+
+
 def chapter_exists(seriesName, chapter_id):
     page_one_url = get_url(seriesName, chapter_id, 1)
     response = send_request(page_one_url)
     return response.status_code == 200
+
+
+def _normalize_choice(value):
+    return str(value).strip()
+
+
+def select_target_chapters(series_name, download_type, start_chapter=None, end_chapter=None, single_chapter=None):
+    mode = _normalize_choice(download_type)
+
+    if mode == "1":
+        chapter_ids = discover_chapter_ids(series_name)
+        return {
+            "ok": True,
+            "chapter_ids": chapter_ids,
+            "mode": mode,
+        }
+
+    if mode == "2":
+        start_text = str(start_chapter or "").strip().lower()
+        end_text = str(end_chapter or "").strip().lower()
+        if not start_text or not end_text:
+            return {
+                "ok": False,
+                "error": "Range mode requires both start_chapter and end_chapter",
+            }
+        chapter_ids = discover_chapter_ids(series_name)
+        selected = select_chapters_from_range(chapter_ids, start_text, end_text)
+        return {
+            "ok": bool(selected),
+            "chapter_ids": selected,
+            "mode": mode,
+            "error": "No chapters matched the specified range" if not selected else None,
+        }
+
+    if mode == "3":
+        chapter_id = str(single_chapter or "").strip().lower()
+        if not chapter_id:
+            return {
+                "ok": False,
+                "error": "Single mode requires single_chapter",
+            }
+        return {
+            "ok": True,
+            "chapter_ids": [chapter_id],
+            "mode": mode,
+        }
+
+    return {
+        "ok": False,
+        "error": "Invalid download_type. Use 1 (full), 2 (range), or 3 (single)",
+    }
+
+
+def run_download_job(
+    manga_name,
+    format_choice="1",
+    download_type="1",
+    start_chapter=None,
+    end_chapter=None,
+    single_chapter=None,
+    resolved_series_name=None,
+    progress_callback=None,
+):
+    set_telemetry_enabled(TELEMETRY_ENABLED)
+    init_logging("manga_downloader")
+
+    _emit_progress(progress_callback, {"stage": "resolving_title", "message": "Resolving manga title"})
+
+    if resolved_series_name:
+        series_name = str(resolved_series_name).strip()
+        title_resolution = {"ok": True, "series": series_name, "source": "provided"}
+    else:
+        title_resolution = resolve_series_name_non_interactive(manga_name)
+        if not title_resolution.get("ok"):
+            return {
+                "ok": False,
+                "error": title_resolution.get("error", "Failed to resolve manga title"),
+                "choices": title_resolution.get("choices", []),
+            }
+        series_name = title_resolution["series"]
+
+    chapter_selection = select_target_chapters(
+        series_name,
+        download_type,
+        start_chapter=start_chapter,
+        end_chapter=end_chapter,
+        single_chapter=single_chapter,
+    )
+    if not chapter_selection.get("ok"):
+        return {
+            "ok": False,
+            "error": chapter_selection.get("error", "Failed to select chapters"),
+            "series": series_name,
+        }
+
+    chapter_ids = chapter_selection["chapter_ids"]
+    if not chapter_ids:
+        return {
+            "ok": False,
+            "error": "No chapters available for download",
+            "series": series_name,
+        }
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "discovering_chapters",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+            "message": f"Resolved {len(chapter_ids)} chapter(s)",
+        },
+    )
+
+    download_manga_by_chapters(series_name, chapter_ids, progress_callback=progress_callback)
+
+    archive_mode = ARCHIVE_MODE_BY_CHOICE.get(_normalize_choice(format_choice))
+    if archive_mode is None:
+        return {
+            "ok": False,
+            "error": "Invalid format_choice. Use 1 (PDF), 2 (CBZ), 3 (Both), or 4 (Images)",
+            "series": series_name,
+        }
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "archiving",
+            "event": "archive_started",
+            "series": series_name,
+            "mode": archive_mode,
+        },
+    )
+
+    if archive_mode == "both":
+        create_archive(series_name, "pdf", progress_callback=progress_callback)
+        create_archive(series_name, "cbz", progress_callback=progress_callback)
+    elif archive_mode != "images":
+        create_archive(series_name, archive_mode, progress_callback=progress_callback)
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "done",
+            "event": "job_completed",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+            "archive_mode": archive_mode,
+        },
+    )
+
+    return {
+        "ok": True,
+        "series": series_name,
+        "chapter_ids": chapter_ids,
+        "chapter_count": len(chapter_ids),
+        "archive_mode": archive_mode,
+        "title_resolution_source": title_resolution.get("source"),
+    }
 
 
 def discover_base_chapters(seriesName, chapter_num, scan_sparse_suffixes=False):
@@ -613,7 +856,7 @@ def get_last_page_number(seriesName, chapter_id):
         print(f"{seriesName} Chapter {chapter_id} last page {last_page}")
         return last_page
 
-def download_manga_by_chapters(seriesName, chapter_ids):
+def download_manga_by_chapters(seriesName, chapter_ids, progress_callback=None):
     if not chapter_ids:
         print("No chapters found for download")
         return
@@ -626,6 +869,7 @@ def download_manga_by_chapters(seriesName, chapter_ids):
                 chapter_ids,
                 enable_resume=RESUME_ENABLED,
                 checkpoint_every_success=CHECKPOINT_EVERY_SUCCESS,
+                progress_callback=progress_callback,
             )
         )
 
