@@ -11,6 +11,10 @@ import threading
 import math
 import re
 import string
+import json
+import html
+import difflib
+from urllib.parse import quote, urlparse
 
 # Toggle profiling/telemetry logs from here.
 # Keep False for normal user runs.
@@ -26,6 +30,198 @@ def chapter_sort_key(chapter_id):
     suffix = match.group(2)
     suffix_key = "" if suffix == "" else suffix
     return (number, suffix_key)
+
+
+def _title_cache_path():
+    return os.path.join(LOCAL_PATH, ".title_alias_cache.json")
+
+
+def _normalize_title_key(text):
+    return re.sub(r"[^a-z0-9]+", "", str(text).lower())
+
+
+def _load_title_cache():
+    cache_path = _title_cache_path()
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_title_cache(cache_data):
+    try:
+        os.makedirs(LOCAL_PATH, exist_ok=True)
+        cache_path = _title_cache_path()
+        tmp_path = cache_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as cache_file:
+            json.dump(cache_data, cache_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        pass
+
+
+def _extract_slug_from_href(href):
+    match = re.search(r"/Manga/([^\"'/?#]+)", href)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _collect_title_candidates(search_html):
+    anchor_pattern = re.compile(r"<a[^>]+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
+    tag_pattern = re.compile(r"<[^>]+>")
+
+    scoped_html = search_html
+    start_marker = "Manga/Manhwa Result"
+    end_marker = "Author/Artist Result"
+    start_index = search_html.find(start_marker)
+    if start_index >= 0:
+        end_index = search_html.find(end_marker, start_index)
+        if end_index > start_index:
+            scoped_html = search_html[start_index:end_index]
+
+    items = []
+    seen = set()
+    for href, inner in anchor_pattern.findall(scoped_html):
+        slug = _extract_slug_from_href(href)
+        if not slug:
+            continue
+        title = re.sub(r"\s+", " ", html.unescape(tag_pattern.sub(" ", inner))).strip()
+        if not title:
+            title = slug.replace("_", " ").title()
+        key = slug.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append({"slug": slug, "title": title})
+    return items
+
+
+def _rank_title_candidates(query_text, candidates):
+    query_norm = _normalize_title_key(query_text)
+    scored = []
+    for item in candidates:
+        title_norm = _normalize_title_key(item["title"])
+        slug_norm = _normalize_title_key(item["slug"])
+        score = max(
+            difflib.SequenceMatcher(None, query_norm, title_norm).ratio(),
+            difflib.SequenceMatcher(None, query_norm, slug_norm).ratio(),
+        )
+        scored.append((score, item))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return scored
+
+
+def _discover_title_candidates(user_input):
+    cleaned = user_input.strip()
+    if not cleaned:
+        return []
+
+    tokens = re.findall(r"[a-z0-9]+", cleaned.lower())
+    stop_words = {"a", "an", "the", "of", "to", "no"}
+    compact_tokens = [tok for tok in tokens if tok not in stop_words]
+
+    query_variants = []
+    for candidate in [
+        cleaned,
+        " ".join(tokens),
+        " ".join(compact_tokens),
+        " ".join(tokens[:2]) if len(tokens) >= 2 else "",
+        tokens[0] if tokens else "",
+    ]:
+        candidate = candidate.strip()
+        if candidate and candidate not in query_variants:
+            query_variants.append(candidate)
+
+    route_names = ["Search", "Find"]
+    all_candidates = []
+    seen = set()
+
+    for query_variant in query_variants:
+        found_for_variant = []
+        seen_variant = set()
+        for index_base in MANGA_INDEX_BASE_URLS:
+            parsed = urlparse(index_base)
+            host = f"{parsed.scheme}://{parsed.netloc}"
+            encoded = quote(query_variant)
+            for route in route_names:
+                route_url = f"{host}/{route}/{encoded}"
+                response = send_request_optional(route_url)
+                if response is None or response.status_code != 200:
+                    continue
+
+                html_text = response.text
+                for candidate in _collect_title_candidates(html_text):
+                    slug_key = candidate["slug"].lower()
+                    if slug_key in seen or slug_key in seen_variant:
+                        continue
+                    seen.add(slug_key)
+                    seen_variant.add(slug_key)
+                    found_for_variant.append(candidate)
+
+        if found_for_variant:
+            all_candidates.extend(found_for_variant)
+            return all_candidates
+
+    return all_candidates
+
+
+def resolve_series_name(user_input):
+    entered = user_input.strip()
+    if not entered:
+        return entered
+
+    cache = _load_title_cache()
+    cache_key = _normalize_title_key(entered)
+    cached_slug = cache.get(cache_key)
+    if cached_slug and chapter_exists(cached_slug, "1"):
+        confirm = input(f"Use cached title match '{cached_slug}'? [Y/n]: ").strip().lower()
+        if confirm in ("", "y", "yes"):
+            print(f"Using cached title match: {cached_slug}")
+            return cached_slug
+
+    candidates = _discover_title_candidates(entered)
+    if not candidates:
+        if chapter_exists(entered, "1"):
+            return entered
+        return entered
+
+    if len(candidates) == 1:
+        only_slug = candidates[0]["slug"]
+        if chapter_exists(only_slug, "1"):
+            cache[cache_key] = only_slug
+            _save_title_cache(cache)
+            print(f"Resolved series: {only_slug}")
+            return only_slug
+        return entered
+
+    print("Possible matches:")
+    top = candidates[:8]
+    for idx, item in enumerate(top, start=1):
+        print(f"{idx}. {item['title']} ({item['slug']})")
+
+    while True:
+        choice_raw = input(f"Select match [1-{len(top)}]: ").strip()
+        try:
+            choice = int(choice_raw)
+        except ValueError:
+            print(f"Enter a valid number between 1 and {len(top)}")
+            continue
+
+        if 1 <= choice <= len(top):
+            break
+
+        print(f"Enter a valid number between 1 and {len(top)}")
+
+    selected_slug = top[choice - 1]["slug"]
+    cache[cache_key] = selected_slug
+    _save_title_cache(cache)
+    print(f"Selected series: {selected_slug}")
+    return selected_slug
 
 
 def chapter_exists(seriesName, chapter_id):
@@ -349,6 +545,7 @@ def main():
     init_logging("manga_downloader")
     with timed_block("app.main"):
         manga = input("Enter Manga name:")
+        manga = resolve_series_name(manga)
         log_event("input.series", series=manga)
         create_archive_input = int(input("Choose your preference:\n1. PDF\n2. CBZ\n3. Both PDF and CBZ\n4. Only Images\nEnter your choice:"))
         log_event("input.archive_mode", choice=create_archive_input)
