@@ -39,3 +39,13 @@ ASYNC_PAGE_CONCURRENCY = 0
 # - detailed: prints periodic in-chapter progress
 PROGRESS_MODE = "chapter"
 PROGRESS_UPDATE_EVERY = 10
+
+# Resume checkpoint tuning
+# RESUME_ENABLED: toggle resume JSON checkpointing globally.
+# CHECKPOINT_EVERY_SUCCESS: flush resume state every N successful pages.
+RESUME_ENABLED = True
+CHECKPOINT_EVERY_SUCCESS = 50
+
+# File reuse tuning
+# When True, existing non-empty page files are treated as completed and skipped.
+SKIP_EXISTING_FILES = True

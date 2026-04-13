@@ -303,7 +303,14 @@ def download_manga_by_chapters(seriesName, chapter_ids):
 
     chapter_ids = sorted(chapter_ids, key=chapter_sort_key)
     with timed_block("manga.download", series=seriesName, chapter_count=len(chapter_ids)):
-        asyncio.run(run_async_download(seriesName, chapter_ids))
+        asyncio.run(
+            run_async_download(
+                seriesName,
+                chapter_ids,
+                enable_resume=RESUME_ENABLED,
+                checkpoint_every_success=CHECKPOINT_EVERY_SUCCESS,
+            )
+        )
 
 def get_last_chapter_number(manga):
     # Start with an initial guess (e.g., a large number)
