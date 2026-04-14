@@ -3,5 +3,6 @@ charset-normalizer==3.3.2
 flask
 idna==3.6
 img2pdf==0.5.1
+aiohttp==3.10.11
 requests==2.31.0
 urllib3==2.1.0

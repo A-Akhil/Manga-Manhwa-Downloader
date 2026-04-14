@@ -4,15 +4,37 @@ from request import *
 from stringHelpers import *
 from output_cbz_pdf import *
 from telemetry import *
+from async_download_engine import run_async_download
+import asyncio
 import os
 import threading
 import math
 import re
 import string
+import json
+import html
+import difflib
+import hashlib
+from urllib.parse import quote, urlparse, urljoin
 
 # Toggle profiling/telemetry logs from here.
 # Keep False for normal user runs.
 TELEMETRY_ENABLED = False
+ARCHIVE_MODE_BY_CHOICE = {
+    "1": "pdf",
+    "2": "cbz",
+    "3": "both",
+    "4": "images",
+}
+
+
+def _emit_progress(progress_callback, payload):
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(payload)
+    except Exception:
+        pass
 
 
 def chapter_sort_key(chapter_id):
@@ -26,10 +48,550 @@ def chapter_sort_key(chapter_id):
     return (number, suffix_key)
 
 
+def _title_cache_path():
+    return os.path.join(CACHE_PATH, "title_alias_cache.json")
+
+
+def _title_options_cache_path():
+    return os.path.join(CACHE_PATH, "title_options_cache.json")
+
+
+def _title_image_map_path():
+    return os.path.join(CACHE_PATH, "title_image_map.json")
+
+
+def _title_image_dir_path():
+    return os.path.join(CACHE_PATH, "title_images")
+
+
+def _normalize_title_key(text):
+    return re.sub(r"[^a-z0-9]+", "", str(text).lower())
+
+
+def _load_title_cache():
+    cache_path = _title_cache_path()
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_title_options_cache():
+    cache_path = _title_options_cache_path()
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_title_image_map():
+    map_path = _title_image_map_path()
+    if not os.path.exists(map_path):
+        return {}
+    try:
+        with open(map_path, "r", encoding="utf-8") as map_file:
+            payload = json.load(map_file)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_title_cache(cache_data):
+    try:
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        cache_path = _title_cache_path()
+        tmp_path = cache_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as cache_file:
+            json.dump(cache_data, cache_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        pass
+
+
+def _save_title_options_cache(cache_data):
+    try:
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        cache_path = _title_options_cache_path()
+        tmp_path = cache_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as cache_file:
+            json.dump(cache_data, cache_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        pass
+
+
+def _save_title_image_map(map_data):
+    try:
+        os.makedirs(CACHE_PATH, exist_ok=True)
+        map_path = _title_image_map_path()
+        tmp_path = map_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as map_file:
+            json.dump(map_data, map_file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, map_path)
+    except Exception:
+        pass
+
+
+def _cache_title_option_images(candidates):
+    if not candidates:
+        return candidates
+
+    image_map = _load_title_image_map()
+    changed = False
+    image_dir = _title_image_dir_path()
+    os.makedirs(image_dir, exist_ok=True)
+
+    for candidate in candidates:
+        thumbnail_url = candidate.get("thumbnail")
+        if not thumbnail_url:
+            continue
+
+        mapped_relative = image_map.get(thumbnail_url)
+        mapped_absolute = os.path.join(os.getcwd(), mapped_relative) if mapped_relative else None
+
+        if mapped_relative and mapped_absolute and os.path.exists(mapped_absolute):
+            candidate["thumbnail_cached"] = mapped_relative
+            continue
+
+        ext_match = re.search(r"\.(jpg|jpeg|png|webp)(?:\?|$)", thumbnail_url, re.IGNORECASE)
+        ext = "." + ext_match.group(1).lower() if ext_match else ".img"
+        file_name = hashlib.sha1(thumbnail_url.encode("utf-8")).hexdigest() + ext
+        relative_path = os.path.join("cache", "title_images", file_name)
+        absolute_path = os.path.join(os.getcwd(), relative_path)
+
+        response = send_request_optional(thumbnail_url, binary=True)
+        if response is None or response.status_code != 200:
+            continue
+
+        try:
+            with open(absolute_path, "wb") as image_file:
+                image_file.write(response.content)
+        except Exception:
+            continue
+
+        image_map[thumbnail_url] = relative_path
+        candidate["thumbnail_cached"] = relative_path
+        changed = True
+
+    if changed:
+        _save_title_image_map(image_map)
+
+    return candidates
+
+
+def _extract_slug_from_href(href):
+    match = re.search(r"/Manga/([^\"'/?#]+)", href)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _collect_title_candidates(search_html, host_base):
+    anchor_pattern = re.compile(r"<a[^>]+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
+    tag_pattern = re.compile(r"<[^>]+>")
+    image_pattern = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE | re.DOTALL)
+
+    scoped_html = search_html
+    start_marker = "Manga/Manhwa Result"
+    end_marker = "Author/Artist Result"
+    start_index = search_html.find(start_marker)
+    if start_index >= 0:
+        end_index = search_html.find(end_marker, start_index)
+        if end_index > start_index:
+            scoped_html = search_html[start_index:end_index]
+
+    items = []
+    seen = set()
+    for href, inner in anchor_pattern.findall(scoped_html):
+        slug = _extract_slug_from_href(href)
+        if not slug:
+            continue
+        title = re.sub(r"\s+", " ", html.unescape(tag_pattern.sub(" ", inner))).strip()
+        if not title:
+            title = slug.replace("_", " ").title()
+        image_match = image_pattern.search(inner)
+        thumbnail = urljoin(host_base, image_match.group(1)) if image_match else None
+        key = slug.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append({"slug": slug, "title": title, "thumbnail": thumbnail})
+    return items
+
+
+def _rank_title_candidates(query_text, candidates):
+    query_norm = _normalize_title_key(query_text)
+    scored = []
+    for item in candidates:
+        title_norm = _normalize_title_key(item["title"])
+        slug_norm = _normalize_title_key(item["slug"])
+        score = max(
+            difflib.SequenceMatcher(None, query_norm, title_norm).ratio(),
+            difflib.SequenceMatcher(None, query_norm, slug_norm).ratio(),
+        )
+        scored.append((score, item))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return scored
+
+
+def _discover_title_candidates(user_input):
+    cleaned = user_input.strip()
+    if not cleaned:
+        return []
+
+    query_key = _normalize_title_key(cleaned)
+    options_cache = _load_title_options_cache()
+    cached_options = options_cache.get(query_key)
+    if isinstance(cached_options, list) and cached_options:
+        return cached_options
+
+    tokens = re.findall(r"[a-z0-9]+", cleaned.lower())
+    stop_words = {"a", "an", "the", "of", "to", "no"}
+    compact_tokens = [tok for tok in tokens if tok not in stop_words]
+
+    query_variants = []
+    for candidate in [
+        cleaned,
+        " ".join(tokens),
+        " ".join(compact_tokens),
+        " ".join(tokens[:2]) if len(tokens) >= 2 else "",
+        tokens[0] if tokens else "",
+    ]:
+        candidate = candidate.strip()
+        if candidate and candidate not in query_variants:
+            query_variants.append(candidate)
+
+    route_names = ["Search", "Find"]
+    all_candidates = []
+    seen = set()
+
+    for query_variant in query_variants:
+        found_for_variant = []
+        seen_variant = set()
+        for index_base in MANGA_INDEX_BASE_URLS:
+            parsed = urlparse(index_base)
+            host = f"{parsed.scheme}://{parsed.netloc}"
+            encoded = quote(query_variant)
+            for route in route_names:
+                route_url = f"{host}/{route}/{encoded}"
+                response = send_request_optional(route_url)
+                if response is None or response.status_code != 200:
+                    continue
+
+                html_text = response.text
+                for candidate in _collect_title_candidates(html_text, host):
+                    slug_key = candidate["slug"].lower()
+                    if slug_key in seen or slug_key in seen_variant:
+                        continue
+                    seen.add(slug_key)
+                    seen_variant.add(slug_key)
+                    found_for_variant.append(candidate)
+
+        if found_for_variant:
+            found_for_variant = _cache_title_option_images(found_for_variant)
+            all_candidates.extend(found_for_variant)
+            options_cache[query_key] = all_candidates
+            _save_title_options_cache(options_cache)
+            return all_candidates
+
+    all_candidates = _cache_title_option_images(all_candidates)
+    options_cache[query_key] = all_candidates
+    _save_title_options_cache(options_cache)
+    return all_candidates
+
+
+def fetch_title_options(query_text, limit=None):
+    options = _discover_title_candidates(query_text)
+    if limit is None:
+        return options
+    return options[:max(1, int(limit))]
+
+
+def resolve_series_name(user_input):
+    entered = user_input.strip()
+    if not entered:
+        return entered
+
+    cache = _load_title_cache()
+    cache_key = _normalize_title_key(entered)
+    cached_slug = cache.get(cache_key)
+    if cached_slug and chapter_exists(cached_slug, "1"):
+        confirm = input(f"Use cached title match '{cached_slug}'? [Y/n]: ").strip().lower()
+        if confirm in ("", "y", "yes"):
+            print(f"Using cached title match: {cached_slug}")
+            return cached_slug
+
+    candidates = _discover_title_candidates(entered)
+    if not candidates:
+        if chapter_exists(entered, "1"):
+            return entered
+        return entered
+
+    print("Possible matches:")
+    top = candidates[:8]
+    for idx, item in enumerate(top, start=1):
+        print(f"{idx}. {item['title']} ({item['slug']})")
+
+    while True:
+        choice_raw = input(f"Select match [1-{len(top)}]: ").strip()
+        try:
+            choice = int(choice_raw)
+        except ValueError:
+            print(f"Enter a valid number between 1 and {len(top)}")
+            continue
+
+        if 1 <= choice <= len(top):
+            break
+
+        print(f"Enter a valid number between 1 and {len(top)}")
+
+    selected_slug = top[choice - 1]["slug"]
+    cache[cache_key] = selected_slug
+    _save_title_cache(cache)
+    print(f"Selected series: {selected_slug}")
+    return selected_slug
+
+
+def resolve_series_name_non_interactive(user_input):
+    entered = user_input.strip()
+    if not entered:
+        return {
+            "ok": False,
+            "error": "Manga name is required",
+            "series": None,
+            "choices": [],
+        }
+
+    cache = _load_title_cache()
+    cache_key = _normalize_title_key(entered)
+    cached_slug = cache.get(cache_key)
+    if cached_slug and chapter_exists(cached_slug, "1"):
+        return {
+            "ok": True,
+            "series": cached_slug,
+            "source": "cache",
+            "choices": [],
+        }
+
+    if chapter_exists(entered, "1"):
+        return {
+            "ok": True,
+            "series": entered,
+            "source": "direct",
+            "choices": [],
+        }
+
+    candidates = _discover_title_candidates(entered)
+    if not candidates:
+        return {
+            "ok": False,
+            "error": "No matching manga title found",
+            "series": None,
+            "choices": [],
+        }
+
+    query_key = _normalize_title_key(entered)
+    exact = [item for item in candidates if _normalize_title_key(item.get("title", "")) == query_key]
+    if len(exact) == 1:
+        selected = exact[0]["slug"]
+        cache[cache_key] = selected
+        _save_title_cache(cache)
+        return {
+            "ok": True,
+            "series": selected,
+            "source": "exact_title_match",
+            "choices": [],
+        }
+
+    if len(candidates) == 1:
+        selected = candidates[0]["slug"]
+        cache[cache_key] = selected
+        _save_title_cache(cache)
+        return {
+            "ok": True,
+            "series": selected,
+            "source": "single_candidate",
+            "choices": [],
+        }
+
+    return {
+        "ok": False,
+        "error": "Ambiguous manga title. Pick one of the provided choices.",
+        "series": None,
+        "choices": candidates[:8],
+    }
+
+
 def chapter_exists(seriesName, chapter_id):
     page_one_url = get_url(seriesName, chapter_id, 1)
     response = send_request(page_one_url)
     return response.status_code == 200
+
+
+def _normalize_choice(value):
+    return str(value).strip()
+
+
+def select_target_chapters(series_name, download_type, start_chapter=None, end_chapter=None, single_chapter=None):
+    mode = _normalize_choice(download_type)
+
+    if mode == "1":
+        chapter_ids = discover_chapter_ids(series_name)
+        return {
+            "ok": True,
+            "chapter_ids": chapter_ids,
+            "mode": mode,
+        }
+
+    if mode == "2":
+        start_text = str(start_chapter or "").strip().lower()
+        end_text = str(end_chapter or "").strip().lower()
+        if not start_text or not end_text:
+            return {
+                "ok": False,
+                "error": "Range mode requires both start_chapter and end_chapter",
+            }
+        chapter_ids = discover_chapter_ids(series_name)
+        selected = select_chapters_from_range(chapter_ids, start_text, end_text)
+        return {
+            "ok": bool(selected),
+            "chapter_ids": selected,
+            "mode": mode,
+            "error": "No chapters matched the specified range" if not selected else None,
+        }
+
+    if mode == "3":
+        chapter_id = str(single_chapter or "").strip().lower()
+        if not chapter_id:
+            return {
+                "ok": False,
+                "error": "Single mode requires single_chapter",
+            }
+        return {
+            "ok": True,
+            "chapter_ids": [chapter_id],
+            "mode": mode,
+        }
+
+    return {
+        "ok": False,
+        "error": "Invalid download_type. Use 1 (full), 2 (range), or 3 (single)",
+    }
+
+
+def run_download_job(
+    manga_name,
+    format_choice="1",
+    download_type="1",
+    start_chapter=None,
+    end_chapter=None,
+    single_chapter=None,
+    resolved_series_name=None,
+    progress_callback=None,
+):
+    set_telemetry_enabled(TELEMETRY_ENABLED)
+    init_logging("manga_downloader")
+
+    _emit_progress(progress_callback, {"stage": "resolving_title", "message": "Resolving manga title"})
+
+    if resolved_series_name:
+        series_name = str(resolved_series_name).strip()
+        title_resolution = {"ok": True, "series": series_name, "source": "provided"}
+    else:
+        title_resolution = resolve_series_name_non_interactive(manga_name)
+        if not title_resolution.get("ok"):
+            return {
+                "ok": False,
+                "error": title_resolution.get("error", "Failed to resolve manga title"),
+                "choices": title_resolution.get("choices", []),
+            }
+        series_name = title_resolution["series"]
+
+    chapter_selection = select_target_chapters(
+        series_name,
+        download_type,
+        start_chapter=start_chapter,
+        end_chapter=end_chapter,
+        single_chapter=single_chapter,
+    )
+    if not chapter_selection.get("ok"):
+        return {
+            "ok": False,
+            "error": chapter_selection.get("error", "Failed to select chapters"),
+            "series": series_name,
+        }
+
+    chapter_ids = chapter_selection["chapter_ids"]
+    if not chapter_ids:
+        return {
+            "ok": False,
+            "error": "No chapters available for download",
+            "series": series_name,
+        }
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "discovering_chapters",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+            "message": f"Resolved {len(chapter_ids)} chapter(s)",
+        },
+    )
+
+    download_manga_by_chapters(series_name, chapter_ids, progress_callback=progress_callback)
+
+    archive_mode = ARCHIVE_MODE_BY_CHOICE.get(_normalize_choice(format_choice))
+    if archive_mode is None:
+        return {
+            "ok": False,
+            "error": "Invalid format_choice. Use 1 (PDF), 2 (CBZ), 3 (Both), or 4 (Images)",
+            "series": series_name,
+        }
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "archiving",
+            "event": "archive_started",
+            "series": series_name,
+            "mode": archive_mode,
+        },
+    )
+
+    if archive_mode == "both":
+        create_archive(series_name, "pdf", progress_callback=progress_callback)
+        create_archive(series_name, "cbz", progress_callback=progress_callback)
+    elif archive_mode != "images":
+        create_archive(series_name, archive_mode, progress_callback=progress_callback)
+
+    _emit_progress(
+        progress_callback,
+        {
+            "stage": "done",
+            "event": "job_completed",
+            "series": series_name,
+            "chapter_total": len(chapter_ids),
+            "archive_mode": archive_mode,
+        },
+    )
+
+    return {
+        "ok": True,
+        "series": series_name,
+        "chapter_ids": chapter_ids,
+        "chapter_count": len(chapter_ids),
+        "archive_mode": archive_mode,
+        "title_resolution_source": title_resolution.get("source"),
+    }
 
 
 def discover_base_chapters(seriesName, chapter_num, scan_sparse_suffixes=False):
@@ -294,28 +856,22 @@ def get_last_page_number(seriesName, chapter_id):
         print(f"{seriesName} Chapter {chapter_id} last page {last_page}")
         return last_page
 
-def download_manga_by_chapters(seriesName, chapter_ids):
+def download_manga_by_chapters(seriesName, chapter_ids, progress_callback=None):
     if not chapter_ids:
         print("No chapters found for download")
         return
 
     chapter_ids = sorted(chapter_ids, key=chapter_sort_key)
     with timed_block("manga.download", series=seriesName, chapter_count=len(chapter_ids)):
-        max_workers = min(len(chapter_ids), MAX_CHAPTER_WORKERS)
-        log_event("manga_download_pool", max_workers=max_workers)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for chapter_id in chapter_ids:
-                last_page = get_last_page_number(seriesName, chapter_id)
-                print(f"Currently downloading Chapter #{chapter_id}, Last Page: {last_page}")
-                future = executor.submit(download_chp_thread, seriesName, chapter_id, 1, last_page)
-                futures.append(future)
-
-            # Wait for all chapter downloads to complete
-            for future in futures:
-                future.result()
-
-        increment_counter("manga.download.success")
+        asyncio.run(
+            run_async_download(
+                seriesName,
+                chapter_ids,
+                enable_resume=RESUME_ENABLED,
+                checkpoint_every_success=CHECKPOINT_EVERY_SUCCESS,
+                progress_callback=progress_callback,
+            )
+        )
 
 def get_last_chapter_number(manga):
     # Start with an initial guess (e.g., a large number)
@@ -354,6 +910,7 @@ def main():
     init_logging("manga_downloader")
     with timed_block("app.main"):
         manga = input("Enter Manga name:")
+        manga = resolve_series_name(manga)
         log_event("input.series", series=manga)
         create_archive_input = int(input("Choose your preference:\n1. PDF\n2. CBZ\n3. Both PDF and CBZ\n4. Only Images\nEnter your choice:"))
         log_event("input.archive_mode", choice=create_archive_input)
@@ -381,9 +938,7 @@ def main():
             elif c == 3:
                 chp = input("Enter chapter number:").strip().lower()
                 log_event("input.single_chapter", chapter=chp)
-                last_page = get_last_page_number(manga, chp)
-                print(f"Currently downloading Chapter #{chp}, Last Page: {last_page}")
-                download_chp_thread(manga, chp, 1, last_page)  # Pass start_page and end_page as 1 and last_page
+                download_manga_by_chapters(manga, [chp])
                 break
 
         if create_archive_input in [1, 2, 3, 4]:
